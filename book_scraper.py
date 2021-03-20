@@ -4,6 +4,8 @@ import requests
 import bs4
 from bs4 import BeautifulSoup as bs
 from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import NoSuchElementException
 import pandas as pd
 from chromedriver_py import binary_path
 import time
@@ -39,9 +41,9 @@ class GR_Spider(scrapy.Spider):
 
         driver.get(response.url)
         
-        url_parsed = bs(response.text, 'lxml')
+        soup = bs(response.text, 'lxml')
 
-        book_title = url_parsed.find(id='bookTitle').text.strip()
+        book_title = soup.find(id='bookTitle').text.strip()
 
         star_counts = {1: 0,
                        2: 0,
@@ -49,28 +51,23 @@ class GR_Spider(scrapy.Spider):
                        4: 0,
                        5: 0}
 
-        def scrape_current_page(driver, soup):
+        def scrape_current_page():
         # Scrapes review data from current "page" and appends them to compiled_list.
-            if driver:
-                source = driver.page_source
-                soup = bs(source, 'lxml')
+            soup = bs(driver.page_source, 'lxml')
             review_list = soup.find_all('div', {'class': 'review'})
             for review in review_list:
                 score = get_score(review)
                 text = get_text(review)
                 total_reviews = sum(star_counts.values())
-                if total_reviews < 50:
-                    if score in star_counts and star_counts[score] <= 10 and text != '':
-                        star_counts[score] += 1 
-                        compiled_list.append({'book_title':book_title,
-                                            'rating':score,
-                                            'text':text})
-                else:
-                    return
+                if score in star_counts and star_counts[score] < 10 and text != '':
+                    star_counts[score] += 1 
+                    compiled_list.append({'Title':book_title,
+                                          'Rating':score,
+                                          'Text':text})
             return
         
         def get_text(review):
-        # Retrieves the text of a given review. Returns an empty string if there is none.
+        # Retrieves the text of the current review. Returns an empty string if there is none.
             text = ''
             if len(review.find_all('span', {'class': 'readable'})) > 0:
                 for child in review.find_all('span', {'class': 'readable'})[0].children:
@@ -85,23 +82,30 @@ class GR_Spider(scrapy.Spider):
                 return score_dict[rating]
             return ''
 
-        # Here we scrape our first page
-        scrape_current_page(False, url_parsed)
-        print('Scraped page 1')
+        # Now we get to scraping our reviews. Instead of going page-by-page like before, we now use
+        # GoodRead's filter system to look at the top reviews from each score-level.
+        page_counter = 1
+        while page_counter <= 5:
+            try:
+                if sum(star_counts.values()) >= 50: break # Not strictly necessary, but just to be safe...
+                filters = driver.find_element_by_link_text('More filters')
+                ActionChains(driver).move_to_element(filters).perform()
+                if page_counter == 1:
+                    driver.find_element_by_partial_link_text('1 star').click()
+                else:
+                    driver.find_element_by_partial_link_text((str(page_counter)+' stars ')).click()
+                time.sleep(3) # Page needs to load.
+                scrape_current_page()
+                print(f"Scraped {page_counter} star reviews successfully.")
+                driver.find_element_by_id('clearFilterbutton').click()
+                time.sleep(3)
+                page_counter += 1
+            except NoSuchElementException:
+                print('NoSuchElementException (likely a pop-up). Refreshing page. Standby...')
+                driver.get(response.url)
+                time.sleep(3)
+                continue
 
-        # Goodreads only links to 10 'pages' of reviews. This loops through them until star_counts is full
-        # or until we reach page 10.
-        page_counter = 2
-        while page_counter <=10:
-            if sum(star_counts.values()) < 50:
-                if driver.find_element_by_link_text(str(page_counter)):
-                        driver.find_element_by_link_text(str(page_counter)).click()
-                        time.sleep(3) # Page needs to load.
-                        scrape_current_page(driver, url_parsed)
-                        print(f"Scraped page {page_counter}")
-                        page_counter += 1
-            else:
-                break
         return
 
 def main():
@@ -119,7 +123,7 @@ def main():
     print(compiled_df.head())
     print(compiled_df.tail())
 
-    compiled_df.to_csv(r'data/compiled_df.csv', index = False)
+    compiled_df.to_csv(r'compiled_df.csv', index = False)
 
 if __name__ == '__main__':
     main()

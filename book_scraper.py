@@ -3,8 +3,6 @@ import bs4
 import requests
 import pandas as pd
 import regex as re
-import scrapy
-from scrapy.crawler import CrawlerProcess
 from bs4 import BeautifulSoup as bs
 from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
@@ -28,6 +26,7 @@ score_dict = {'it was amazing': 5,
           '': None}
 
 safety = 120 # How many review would you like to scrape per book?
+cap = int(safety/5) # Max reviews per score-level
 
 compiled_list = []
 
@@ -47,19 +46,19 @@ def compile_reviews(response):
                    5: 0}
 
     def get_book_data(soup):
-        # Retrieves overview data for a given book, including title, year of publication, and
-        # associated genre tags (as determined by users).
-            genres = []
-            title = soup.find(id='bookTitle').text.strip()    
-            try:
-                pub_data = soup.find('nobr', {'class':'greyText'}).string
-            except (NoSuchElementException, AttributeError): 
-                pub_data = soup.find('div', {'id':'details'}).find_all('div', {'class':'row'})[1].string
-            year = re.search('([0-9]{4})', pub_data).group(1)
-            if len(soup.find_all('a', {'class': 'actionLinkLite bookPageGenreLink'})) >0:
-                for g in soup.find_all('a', {'class': 'actionLinkLite bookPageGenreLink'}):
-                    genres.append(g.text)   
-            return title, year, genres
+    # Retrieves overview data for a given book, including title, year of publication, and
+    # associated genre tags (as determined by users).
+        genres = []
+        title = soup.find(id='bookTitle').text.strip()    
+        try:
+            pub_data = soup.find('nobr', {'class':'greyText'}).string
+        except (NoSuchElementException, AttributeError): 
+            pub_data = soup.find('div', {'id':'details'}).find_all('div', {'class':'row'})[1].string
+        year = re.search('([0-9]{4})', pub_data).group(1)
+        if len(soup.find_all('a', {'class': 'actionLinkLite bookPageGenreLink'})) >0:
+            for g in soup.find_all('a', {'class': 'actionLinkLite bookPageGenreLink'}):
+                genres.append(g.text)   
+        return title, year, genres
 
     def get_text(review):
     # Retrieves the text of the current review. Returns an empty string if there is none.
@@ -104,13 +103,11 @@ def compile_reviews(response):
                 shelves.append(_shelf_review.text)
         return shelves
 
-    def scrape_current_page(page):
+    def scrape_current_page(soup, page):
     # Scrapes review data from current "page" and appends them to compiled_list along with book data.
-        soup = bs(driver.page_source, 'lxml')
         review_list = soup.find_all('div', {'class': 'review'})
-        print(f'Found {len(review_list)} total {page}-star reviews.')
+        if page: print(f'Found {len(review_list)} total {page}-star reviews.')
         for review in review_list:
-            cap = int(safety/5) # Max reviews per score-level
             score = get_score(review)
             text = get_text(review)
             likes = get_likes(review)
@@ -129,10 +126,13 @@ def compile_reviews(response):
         return
 
     driver.get(response.url)
-    soup = bs(response.text, 'lxml')
+    soup = bs(driver.page_source, 'lxml')
     title, year, genres = get_book_data(soup)
     print(f'Compiling review data for {title}...')
-    buffer = 3
+    print('Scraping first page...`')
+    scrape_current_page(soup, False)
+    for k in star_counts.keys():
+        print('\t',k,'star:\t',star_counts[k])
     score_counter = 1
     while score_counter <= 5 and sum(star_counts.values()) < safety:
         try:
@@ -142,32 +142,48 @@ def compile_reviews(response):
                 driver.find_element_by_partial_link_text('1 star').click()
             else:
                 driver.find_element_by_partial_link_text((str(score_counter)+' stars ')).click()
-            time.sleep(buffer) # Page needs to load.
-            scrape_current_page(score_counter)
-            if star_counts[score_counter] == 0:
-                raise NoSuchElementException
-            driver.find_element_by_id('clearFilterbutton').click()
+            time.sleep(3) # Page needs to load.
+            soup = bs(driver.page_source, 'lxml')
+            current_filter = soup.find('div', {'class':'reviewSearchResults__count'})
+            if current_filter is None or str(score_counter) not in current_filter.b.string: # Make sure new data has actually loaded
+            # if soup_new == soup_old or soup_new == soup:
+                buffer = 3
+                while buffer < 5:
+                    print('Buffering...')
+                    time.sleep(buffer)
+                    soup = bs(driver.page_source, 'lxml')
+                    current_filter = soup.find('div', {'class':'reviewSearchResults__count'})
+                    # if soup_new == soup_old or soup_new == soup:
+                    if current_filter is None or str(score_counter) not in current_filter.b.string:
+                        buffer += 1
+                        continue
+                    else:
+                        break
+                if buffer == 5:
+                    print('Refreshing Page. Standby...')
+                    driver.get(response.url)
+                    continue
+            scrape_current_page(soup, score_counter)
             print(f"Successfully scraped {star_counts[score_counter]} reviews!")
-            time.sleep(buffer) 
-        except NoSuchElementException as e:
-            if buffer < 5:
-                print("Buffering...")
-                buffer += 1
-                continue
-            print(f'{e} (likely a pop-up). Refreshing page. Standby...')
+            for k in star_counts.keys():
+                print('\t',k,'star:\t',star_counts[k])
+            score_counter+= 1
+            continue
+        except NoSuchElementException:
+            print('NoSuchElementException (likely a pop-up). Refreshing page. Standby...')
             driver.get(response.url)
             continue
-        except ElementNotInteractableException as e:
-            print(f'{e}. Cooling down 30 secs and refreshing page. Standby...')
+        except ElementNotInteractableException:
+            print('ElementNotInteractableException. Cooling down 30 secs and refreshing page. Standby...')
             for i in len(30):
                 time.sleep(1)
-                print(i+1)
-        score_counter += 1
-        buffer = 3 
+                print(str(i+1)+'...')
+            driver.get(response.url)
+            continue
     print(f"All done for {title}! Here's a preview of your DataFrame...\n")
     update_df = pd.DataFrame(compiled_list)
     print(update_df.info())
-    print(update_df.sample(10))    
+    print(update_df.Title.value_counts())    
     return
 
 def find_links(response):
@@ -175,13 +191,12 @@ def find_links(response):
     url_parsed = requests.get(response)
     soup = bs(url_parsed.text, 'lxml')
     link_list = [link['href'] for link in soup.find_all('a', {'class':'bookTitle'}) if not re.search(r'\#[^1]\d?\)', link.text)] # We only want the first book in a series
-    for link in link_list[:10]:
+    for link in link_list[:20]:
         print(base_url+link)
         compile_reviews(requests.get(base_url+link))
-        time.sleep(10)
+        time.sleep(10) # To avoid overloading Goodread's servers
 
 def main():
-    # start_urls = ['https://www.goodreads.com/book/show/7235533-the-way-of-kings', 'https://www.goodreads.com/book/show/44767458-dune']
     start_urls = ['https://www.goodreads.com/shelf/show/fantasy']
     for url in start_urls:
         find_links(url)
@@ -194,8 +209,7 @@ def main():
     print(compiled_df.head())
     print(compiled_df.tail())
 
-    compiled_df.to_csv(r'data/compiled_df.csv', index = False)
+    compiled_df.to_csv(r'../test_df.csv', index = False)
 
 if __name__ == '__main__':
     main()
-

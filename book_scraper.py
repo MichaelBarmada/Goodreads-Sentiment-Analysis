@@ -146,22 +146,21 @@ def compile_reviews(response):
             soup = bs(driver.page_source, 'lxml')
             current_filter = soup.find('div', {'class':'reviewSearchResults__count'})
             if current_filter is None or str(score_counter) not in current_filter.b.string: # Make sure new data has actually loaded
-            # if soup_new == soup_old or soup_new == soup:
                 buffer = 3
-                while buffer < 5:
+                while buffer < 7:
                     print('Buffering...')
                     time.sleep(buffer)
                     soup = bs(driver.page_source, 'lxml')
                     current_filter = soup.find('div', {'class':'reviewSearchResults__count'})
-                    # if soup_new == soup_old or soup_new == soup:
                     if current_filter is None or str(score_counter) not in current_filter.b.string:
                         buffer += 1
                         continue
                     else:
                         break
-                if buffer == 5:
-                    print('Refreshing Page. Standby...')
-                    driver.get(response.url)
+                if buffer == 7:
+                    print("Clearing filters and trying again...")
+                    driver.find_element_by_id('clearFilterbutton').click()
+                    time.sleep(3)
                     continue
             scrape_current_page(soup, score_counter)
             print(f"Successfully scraped {star_counts[score_counter]} reviews!")
@@ -191,9 +190,11 @@ def find_links(response):
     url_parsed = requests.get(response)
     soup = bs(url_parsed.text, 'lxml')
     link_list = [link['href'] for link in soup.find_all('a', {'class':'bookTitle'}) if not re.search(r'\#[^1]\d?\)', link.text)] # We only want the first book in a series
-    for link in link_list[:20]:
+    for link in link_list[21:]:
         print(base_url+link)
         compile_reviews(requests.get(base_url+link))
+        backup_df = pd.DataFrame(compiled_list)
+        backup_df.to_csv('data/backup_df.csv', index= False)
         time.sleep(10) # To avoid overloading Goodread's servers
 
 def main():
@@ -209,7 +210,7 @@ def main():
     print(compiled_df.head())
     print(compiled_df.tail())
 
-    compiled_df.to_csv(r'../test_df.csv', index = False)
+    compiled_df.to_csv('data/compiled_df.csv', index = False)
 
 if __name__ == '__main__':
     main()

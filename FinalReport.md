@@ -5,26 +5,40 @@ Michael Barmada MDB120@pitt.edu
 
 ## Table of Contents...
 * [Introduction](#Introduction)
- * [Problems...](#Problems...)
- * [Final Data](#Final-Data)
+	* [Goodreads](#Goodreads)
+	* [Problems](#Problems)
+	* [Final Data](#Final-Data)
 * [Building Classifiers](#Building-Classifiers)
- * [By Rating](#By-Rating)
- * [Binary Classification](#Binary-Classification)
- * [Feature Weights (WordClouds)](#Feature-Weights)
+ 	* [By Rating](#By-Rating)
+	* [Binary Classification](#Binary-Classification)
+	* [Feature Weights (WordClouds)](#Feature-Weights)
 * [Specific Lexical Analysis](#Specific-Lexical-Analysis)
- * [Third-Person Pronoun Use](#Third-Person-Pronoun-Use)
- * [Other Features](#Other-Features)
- * [Titular Analysis](#Titular-Analysis)
+	* [Third-Person Pronoun Use](#Third-Person-Pronoun-Use)
+	* [Other Features](#Other-Features)
+	* [Titular Analysis](#Titular-Analysis)
+* [Non-Lexical Data](#Non-Lexical-Data)
+* [Conclusion](#Conclusion)
 
 ## Introduction
 
-The goal of this analysis was to find out what linguistically differentiates positive and negative Goodreads reviews in the fantasy genre. However, the process of collecting the data necessary to perform such an analysis proved to be a project unto itself. 
+While trying to come up with an idea for this project, I started looking around the internet for some inspiration. I had started reading more often during the pandemic and was really into sci-fi/fantasy at the time, so I was looking for something along those lines when I found [100 years of scifi](https://openmappr.com/play/100YrsOfSciFi). This very complicated project involved scraping goodreads reviews for data on sci-fi books that was then used to build a cluster network that links books together based on common keywords.
 
+This seemed immediately too ambitious for how little I understood about data science and webscraping, but I was drawn to the idea of using goodreads reviews as a basis for my analysis. Thus, I decided I would perform some sentiment analysis on goodreads reviews, focusing specifically on the fantasy side of sci-fi/fantasy to keep things interesting. 
+
+I ended up getting a bit distracted along the way, but the main goal of this analysis was to find out what linguistically differentiates positive and negative Goodreads reviews in the fantasy genre. For this I had some preliminary hypothesis...
+
+* Overall, 3-star reviews will skew more positive (they are awkwardly in the middle and the books were all popular and well-received)
+* More positive reviews will receive more likes (for the same reasons)
+* Negative reviews will use more first-person pronouns (negative reviews may tend to focus on personal experience over objective critique)
+
+Before I could get to these, however, I had to collect my data –a process that proved to be a project unto itself. 
+
+### Goodreads
 Reviews were scraped from goodreads.com, a website for readers to review the books they've read and share those reviews with others. It combines many elements of an audience review site (e.g. metacritic) with those of a social media platform, meaning that users can “like” reviews and follow other users to see what they have been reading.
 
 Goodreads also allows users to place books in certain "shelves", a user-driven way of classifying similar books without relying on a fixed set of established keywords. For the purpose of this analysis, I decided to use the Fantasy shelf, which contains links to the top 100,000 books most often shelved as fantasy by users.
 
-### Problems...
+### Problems
 Immediately, I ran into a problem as the fantasy shelf includes multiple books from a series. For instance, the top 10 books are almost all Harry Potter. In order to get a better spread of the fantasy genre I decided to exclude everything but the first book in a series. I used a small piece of regex to filter out the offending book titles while scraping this page for URLs and ended up with 32 good URLs. 
 The other main issue I encountered was with ajax requests. Where most buttons on a website load a new page with new information, Goodreads’ review panel uses ajax requests to seamlessly update the reviews that it displays without having to refresh the page. From a design standpoint, this is quite nice (when it works), but it makes scraping incredibly difficult as there are no URLs for a spider to follow. Furthermore, the buttons must be manually clicked from a web browser, which a spider is unable to do. To solve this, I had to set up and program a web driver that could open Goodreads in my browser and push each button for me. This was made even more difficult by the inconsistency of ajax requests on Goodreads.com. Sometimes the page would update instantaneously, but other times it took upwards of 15 seconds to load the next page of reviews. 
 
@@ -117,8 +131,34 @@ Right away, we see that comas are more common than periods in positive reviews. 
 In a similar vein, exclamation points are much more frequent in positive reviews. Question marks, however, predominate in the negative reviews. Looking at some sentences with question marks from such reviews, most seem to be sarcastic or at least rhetorical. Here are some highlights...
 
 "I should lighten up, right?"
+
 "So whats this book all this about then?"
+
 "Like where was the fucking action ?"
+
 "No??"
 
+### Titular Analysis
+This part of the analysis was a bit of a detour. I wanted to see how often each book was mentioned in reviews of another book. This had a few problems to work of its own (namely the fact that people frequntly drop the leading determiner of a book's title), but in the end I managed to get some accurate counts
 
+![png](images/punct_list.png)
+
+It should come as no surprise that Tolkien's works are at the top of the list, but what's interesting is that something like American Gods is more frequently referenced than a Game of Thrones, especially considering the latter's cultural significance. 
+
+My best explanation for this is that a Game of Thrones has a handy, widely-used acronym (aGoT or just GoT) for use in discussions. American Gods, however, does not. This is an issue with a lot of these books, as acronyms are especially common in fantasy discussions (lotr, asoiaf, wot, hp, etcetera). It should be possible to automate a way of acronymizing all of these titles, but I unfortunately did not have the time to work that out.
+
+## Non-Lexical Data
+
+For non-lexical data, I had six main categories: tokens, types, ttr, date of publication, date of review, and total likes. I ran kendall's tau tests to see how well each of these correlated with rating.
+
+![png](images/nonlex_corr.png)
+
+As we predicted, likes and rating are fairly strongly correlated. Everything else is a bit weaker, but the only insignificant correlation is between publication year and rating, which seemed the least likely to be correlated anyways. Date of review is also only weakly correlated which makes sense. 
+
+As expected, these weak correlations didn't make for particularly accurate estimators. For classification, I tried using principal components analysis and a K-Nearest Neighbors classifier, but I got a maximum accuracy of only about 33 percent.
+
+## Conclusion
+
+There were some noteable lingusitic differences in positive and negative goodreads reviews in the fantasy genre. I was able to test my hypotheses and found that, although 3-star reviews ended up very balanced, likes and rating did end up being positively correlated and first-person pronouns did show up more frequently in negative reviews (if only a little). I was also able to take this analysis one step further, looking at differences in gendered pronouns between positive and negative reviews. Although I was not able to make any definitve conclusions, there seems to be some gender bias in goodreads reviews.
+
+This project was incredibly fun, and a very profound learning experience. I learned a lot about how to apply these concepts to real-world data and, perhaps more importantly, how to actually get that data. I honestly wish I had more time to flesh out some parts of the analysis, but in the end I had to stop somewhere or else this report would (somehow) end up even longer than it already is.

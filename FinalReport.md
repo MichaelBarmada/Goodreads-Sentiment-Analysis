@@ -18,6 +18,7 @@ In the end, I found myself with 3,549 reviews from 32 titles. For each book, I h
 
 Going into the analysis, I intended to split the data between positive and negative reviews, but first, I wanted to see how well I could predict review score using just lexical data.  Because review score can be treated as either continuous or categorical (ordinal) data, I decided to try out two estimators: a multinomial naïve-bayes classifier and a linear regressor. Despite a bit of hyperparameter tuning, I could not get the classifier above 60% accuracy. For a classifier predicting a variable of 5 categories, that isn’t too bad but it also isn’t ideal. 
 
+	Confusion matrix for MultinomialNB
 ![png](images/rating_matrix.png)
 
 As we can see, the classifier excels at 4 and 5-star reviews, but does a lot worse at the other end, especially with 2-star reviews. These, it seems to mistake for 1-star reviews quite often. There is also generally a bit of confusion between 4 and 5-star reviews as well as, interestingly, a lot of ambiguity with 3-star reviews. The classifier seems to be unsure about what distinguishes them from 2 and 4-star reviews.
@@ -25,14 +26,52 @@ The regressor, unfortunately, did not do much better. It was only about 55 perce
 
 Thankfully, binary classification went much better. For this, I assumed that 1 and 5-star reviews would be overwhelmingly negative and positive, respectfully. I therefore split my data set in two, taking out the mid-score reviews and using the ends to train a binary classifier. I tried out multiple different models for this (including multinomial naïve bayes and logistic regression) but the classifier with the highest accuracy was achieved using truncated singular value decomposition (TruncatedSVD) and a linear support vector classifier (LinearSVC). 
 
+	Confusion Matrix for LinearSVC model
 ![png](images/svc_clf.png)
 
-This reached an accuracy of 91.7 percent, just edging out the MultinomialNB (89.6) and LogisticRegression (89.3) models. Interestingly, as can be seen with this confusion matrix for the SVC model, all of them seem to have a slight positive bias (note that in this matrix 5 = positive and 1 = negative). 
+This classifier reached an accuracy of 91.7 percent, just edging out the MultinomialNB (89.6) and LogisticRegression (89.3) models. Interestingly, as can be seen with this confusion matrix for the SVC model, all of them seem to have a slight positive bias (note that in this matrix 5 = positive and 1 = negative). 
 
-Unfortunately, using a dimensionality reduction technique like TruncatedSVD made it impossible to extract meaningful feature weights from the LinearSVC model, so we’ll look at the ones from the logistic regressor instead…
+Unfortunately, using a dimensionality reduction technique like TruncatedSVD made it impossible to extract meaningful feature weights from the LinearSVC model, so we’ll look at the ones from the naive bayes classifier instead…
 
-	Positive
+	Positive Wordcloud
 ![png](images/pos_cloud.png)
 
-	Negative
+	Negative Wordcloud
 ![png](images/neg_cloud.png)
+
+It seems that bigrams dominate the negative features while unigrams carry more positive weight. These wordclouds are a little convoluted, however, let's split them up by unigrams and bigrams...
+
+	Positive Bigram Wordlcoud
+![png](images/pos_bgram_cloud.png)
+
+	Positive Unigram Wordcloud
+![png](images/pos_ugram_cloud.png)
+
+	Negative Bigram Wordlcoud
+![png](images/neg_bgram_cloud.png)
+
+	Negative Unigram Wordcloud
+![png](images/neg_ugram_cloud.png)
+
+Things seem pretty straightforward here, except for the negative bigrams. These are a bit specific (though I can see why retellings of beauty and the beast might be unpopular). Most of the positive bigrams are quite specific as well, but most of those at least make reference to other books or authors.
+
+Once I had my classifier trained, I used it to predict the sentiment of the mid-score data and combined the two pieces back into one dataframe. 
+
+	Sentiment by Rating
+![png](images/sentiment_by_rating.png)
+
+Looking at sentiment compared to rating, it seemed that positive and negative reviews were fairly evenly spread. 4-star reviews were mostly positive, 2-star reviews mostly negative, and 3-star reviews were almost evenly split. From there, I started dig into the specific linguistic data using SpaCy.
+
+The first thing I looked at was part of speech frequency. However, the two were almost identical across the board. After that, I moved on to pronoun usage. 
+
+	Most Common Pronouns (Left: Positive, Right: Negative)
+![png](images/pron_list.png)
+
+This list specifically looks at lemmas so as to eliminate subject/object differences. What stands out on this list is that, while 'I' dominates in all reviews, it is a good bit more frequent in negative reviews. This is a relatively small difference, but it supports our hypothesis that negative reviews use more first-person pronouns. 
+
+What's potentially more interesting is that third-person fememine pronouns are a good bit more frequent in negative reviews while masculine reviews are conversely dominant in positive reviews. This hints at a degree of bias in goodreads reviews, and warrants some further investigation.
+
+Based on the incongruence in gendered pronouns, I hypothesized that books with female protagonists (or a largely-female cast) would generally be reviewed 
+
+What's unclear is whether this 
+

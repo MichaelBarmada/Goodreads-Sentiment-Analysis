@@ -141,7 +141,7 @@ In a similar vein, exclamation points are much more frequent in positive reviews
 ### Titular Analysis
 This part of the analysis was a bit of a detour. I wanted to see how often each book was mentioned in reviews of another book. This had a few problems to work of its own (namely the fact that people frequntly drop the leading determiner of a book's title), but in the end I managed to get some accurate counts
 
-![png](images/punct_list.png)
+![png](images/references.png)
 
 It should come as no surprise that Tolkien's works are at the top of the list, but what's interesting is that something like American Gods is more frequently referenced than a Game of Thrones, especially considering the latter's cultural significance. 
 
